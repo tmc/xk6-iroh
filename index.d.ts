@@ -11,7 +11,7 @@ declare module 'k6/x/iroh' {
     alpn?: string;
     /** "vu" (default) or "shared". */
     endpointScope?: string;
-    /** Cell label stamped as the peer tag on every sample ("go", "rust", ...). */
+    /** Cell label stamped as the peer tag on every sample ("go", "rust", "ffi", ...). */
     peer?: string;
     /** "default", "disabled", or "forced" (requires relayURL). */
     relayMode?: string;

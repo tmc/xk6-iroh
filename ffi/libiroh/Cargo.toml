@@ -1,0 +1,19 @@
+[package]
+name = "iroh-go"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "iroh"
+crate-type = ["staticlib"]
+
+[dependencies]
+iroh-ffi = { git = "https://github.com/decentral1se/iroh-ffi", rev = "455ba0df43d07b1a28890a70f325b71b05ddeb88" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "unwind"
+strip = true
