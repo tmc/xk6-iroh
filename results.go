@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-// resultLine is one per-transfer record in the unified perfbench JSONL
-// schema: rung, lang, sample, bytes, and duration_ns are the fields the
-// Mann-Whitney analyzer requires; flow_bytes and flow_duration_ns feed
-// its fairness metric; the remaining fields are perflab provenance that
-// the analyzer ignores.
+// resultLine is one per-transfer record in the JSONL schema shared with
+// go-iroh's benchmark harness: rung, lang, sample, bytes, and duration_ns
+// are the fields a Mann-Whitney analyzer over this corpus requires;
+// flow_bytes and flow_duration_ns feed its fairness metric; the remaining
+// fields are perflab provenance that such an analyzer ignores.
 type resultLine struct {
 	Rung           string  `json:"rung"`
 	Lang           string  `json:"lang"`
@@ -140,7 +140,8 @@ func (root *RootModule) recordTransfer(peer string, opts StreamOpts, res StreamR
 		Rung: fmt.Sprintf("perflab-%s-streams-%d-msg-%d", l.scenario, opts.Streams, opts.MsgSize),
 		// lang names the perflab CELL (gg = go client vs go peer,
 		// gr = go client vs rust peer), deliberately distinct from the
-		// perfbench native corpus values ("go", "rust") so the two can
+		// native corpus values ("go", "rust") used by go-iroh's
+		// benchmark harness, so the two can
 		// never be pooled as if gr were Rust-native.
 		Lang:      cellName(peer),
 		Bytes:     res.BytesSent,
