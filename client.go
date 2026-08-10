@@ -574,8 +574,9 @@ type FetchOpts struct {
 	// TimeoutMs bounds the whole fetch in milliseconds (default 600000).
 	TimeoutMs int `json:"timeoutMs"`
 	// StallMs fails the fetch when no bytes arrive for this long
-	// (default 30000) — the relay-wedge gate: a transfer may be slow,
-	// but a zero-progress window means the flow-control path wedged.
+	// (default 30000). A transfer may legitimately be slow, but a
+	// zero-progress window means the flow-control path stopped
+	// delivering, which throughput alone does not distinguish.
 	StallMs int `json:"stallMs"`
 }
 

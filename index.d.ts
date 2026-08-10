@@ -45,7 +45,7 @@ declare module 'k6/x/iroh' {
 
   export interface FetchOpts {
     timeoutMs?: number;
-    /** Fail when no bytes arrive for this long (wedge gate). */
+    /** Fail when no bytes arrive for this long (stall gate). */
     stallMs?: number;
   }
   export interface FetchResult {

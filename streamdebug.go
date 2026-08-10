@@ -9,7 +9,7 @@ import (
 )
 
 // StreamDebug periodically dumps per-stream transfer offsets and
-// blocked-in-Read/Write state to a file, for diagnosing wedged
+// blocked-in-Read/Write state to a file, for diagnosing stalled
 // connections: a writer ahead of the reader by a flow-control window
 // with the reader blocked points at an undeliverable receive gap; equal
 // offsets with the writer blocked point at credit starvation.
