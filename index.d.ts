@@ -13,6 +13,13 @@ declare module 'k6/x/iroh' {
     endpointScope?: string;
     /** Cell label stamped as the peer tag on every sample ("go", "rust", "ffi", ...). */
     peer?: string;
+    /**
+     * iroh implementation this client drives, by backend name; "go"
+     * (default) is always available. Stamped as the impl tag, so peer
+     * names the target's stack and impl names the generator's. An impl
+     * this k6 binary was not built with is an error, not a fallback.
+     */
+    impl?: string;
     /** "default", "disabled", or "forced" (requires relayURL). */
     relayMode?: string;
     relayURL?: string;

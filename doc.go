@@ -10,10 +10,20 @@
 //	    target: __ENV.TARGET_TICKET,   // endpoint ticket from the target peer
 //	    alpn: 'perflab/0',
 //	    endpointScope: 'vu',           // vu (default) | shared
-//	    peer: __ENV.PEER || 'go',      // go | rust: tags every sample
+//	    peer: __ENV.PEER || 'go',      // what the TARGET runs; tags every sample
+//	    impl: __ENV.IMPL || 'go',      // which iroh THIS client drives
 //	    relayMode: 'default',          // default | disabled | forced
 //	    relayURL: __ENV.RELAY_URL,     // required for relayMode forced
 //	});
+//
+// peer and impl are different axes: peer is a free-form label for the
+// target's stack, while impl selects the implementation the load
+// generator itself uses, from the backends linked into this k6 binary.
+// "go" (go-iroh) is always present and is the default; others come from
+// separate modules added with their own --with at build time, so a plain
+// build stays pure Go. An impl this binary lacks is an error rather than
+// a silent fallback, because a cell labeled with an implementation it
+// did not run is worse than one that fails.
 //
 //	export default function () {
 //	    const res = client.sendStreams({ streams: 16, bytes: 64 * 1024 * 1024, msgSize: 1024 });

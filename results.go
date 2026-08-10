@@ -27,6 +27,7 @@ type resultLine struct {
 	Schema    string `json:"schema"`
 	Scenario  string `json:"scenario"`
 	Peer      string `json:"peer"`
+	Impl      string `json:"impl"`
 	GoIroh    string `json:"go_iroh"`
 	RustIroh  string `json:"rust_iroh,omitempty"`
 	Host      string `json:"host"`
@@ -129,7 +130,7 @@ func cellName(peer string) string {
 
 // recordTransfer appends one JSONL line for a completed sendStreams
 // fan-out. It is a no-op unless PERFLAB_JSONL is set.
-func (root *RootModule) recordTransfer(peer string, opts StreamOpts, res StreamResult, wall time.Duration, outcomes []streamOutcome) {
+func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res StreamResult, wall time.Duration, outcomes []streamOutcome) {
 	l := &root.results
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -148,6 +149,7 @@ func (root *RootModule) recordTransfer(peer string, opts StreamOpts, res StreamR
 		Schema:    "perflab/1",
 		Scenario:  l.scenario,
 		Peer:      peer,
+		Impl:      impl,
 		GoIroh:    l.goIroh,
 		RustIroh:  l.rustIroh,
 		Host:      l.host,

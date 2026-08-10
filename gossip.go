@@ -155,7 +155,10 @@ func (c *Client) joinGossip(ctx context.Context, topicName string) error {
 	if c.gossipTopic != nil {
 		return nil
 	}
-	ep, err := c.endpointFor(ctx)
+	if !c.backend.Capabilities().Gossip {
+		return fmt.Errorf("impl %q does not support the gossip scenarios", c.config.Impl)
+	}
+	ep, err := c.goEndpointFor(ctx, "gossip")
 	if err != nil {
 		return err
 	}

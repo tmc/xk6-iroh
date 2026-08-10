@@ -73,7 +73,7 @@ type BackendConn interface {
 	MaxDatagramSize() (int, bool)
 	// Done is closed when the connection dies, so the client redials.
 	Done() <-chan struct{}
-	CloseWithError(code uint64, reason string)
+	CloseWithError(code uint64, reason string) error
 }
 
 // BackendStream is one bidirectional stream. CloseWrite finishes the

@@ -120,11 +120,15 @@ func (c goConn) MaxDatagramSize() (int, bool) { return c.conn.MaxDatagramSize() 
 
 func (c goConn) Done() <-chan struct{} { return c.conn.Context().Done() }
 
-func (c goConn) CloseWithError(code uint64, reason string) {
-	c.conn.CloseWithError(code, reason)
+func (c goConn) CloseWithError(code uint64, reason string) error {
+	return c.conn.CloseWithError(code, reason)
 }
 
 type goStream struct{ s *iroh.Stream }
+
+// stream exposes the concrete go-iroh stream to the blobs workload,
+// whose protocol helpers take it directly.
+func (s goStream) stream() *iroh.Stream { return s.s }
 
 func (s goStream) Read(p []byte) (int, error)    { return s.s.Read(p) }
 func (s goStream) Write(p []byte) (int, error)   { return s.s.Write(p) }

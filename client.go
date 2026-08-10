@@ -15,7 +15,6 @@ import (
 	"github.com/tmc/go-iroh/gossip"
 	"github.com/tmc/go-iroh/iroh"
 	"github.com/tmc/go-iroh/netaddr"
-	"github.com/tmc/go-iroh/relay"
 	"go.k6.io/k6/v2/js/modules"
 )
 
@@ -34,6 +33,13 @@ type Config struct {
 	// Peer labels the target implementation ("go" or "rust"); it is
 	// stamped as the peer tag on every emitted metric sample.
 	Peer string `json:"peer"`
+	// Impl selects the iroh implementation this client drives, by
+	// backend name ("go", the default). It is stamped as the impl tag
+	// on every sample, so peer names what the target runs and impl
+	// names what the load generator runs. Selecting a backend that
+	// this k6 binary was not built with is an error, never a silent
+	// fallback: a mislabeled cell is worse than a failed one.
+	Impl string `json:"impl"`
 	// RelayMode is "default" (direct-only, this build's default),
 	// "disabled" (explicitly no relay), or "forced" (relay only:
 	// direct IP transports disabled). "forced" requires RelayURL.
@@ -47,6 +53,7 @@ type Config struct {
 type Client struct {
 	config  Config
 	target  netaddr.EndpointAddr
+	backend Backend
 	vu      modules.VU
 	metrics *perflabMetrics
 	root    *RootModule
@@ -56,8 +63,8 @@ type Client struct {
 	hasBlob    bool
 
 	mu         sync.Mutex
-	endpoint   *iroh.Endpoint // vu-scoped endpoint, lazily bound
-	conn       *iroh.Conn
+	endpoint   BackendEndpoint // vu-scoped endpoint, lazily bound
+	conn       BackendConn
 	lastSocket map[string]uint64 // counters emitted by the last MetricsSnapshot
 
 	gossip       *gossip.Gossip // lazily created by Gossip
@@ -86,6 +93,13 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	if config.Peer == "" {
 		config.Peer = "go"
 	}
+	if config.Impl == "" {
+		config.Impl = "go"
+	}
+	backend, err := lookupBackend(config.Impl)
+	if err != nil {
+		return nil, err
+	}
 	switch config.RelayMode {
 	case "":
 		config.RelayMode = "default"
@@ -99,6 +113,7 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	}
 	c := &Client{
 		config:  config,
+		backend: backend,
 		vu:      mi.vu,
 		metrics: mi.metrics,
 		root:    mi.root,
@@ -106,11 +121,11 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	// Target is either a plain endpoint ticket or an iroh-blobs ticket
 	// (endpoint address + hash). A blobs ticket selects the blobs ALPN
 	// unless the script overrides it.
-	addr, err := endpointticket.Decode(config.Target)
-	if err != nil {
+	addr, decErr := endpointticket.Decode(config.Target)
+	if decErr != nil {
 		bt, berr := blobs.ParseTicket(config.Target)
 		if berr != nil {
-			return nil, fmt.Errorf("decode target ticket: %w", err)
+			return nil, fmt.Errorf("decode target ticket: %w", decErr)
 		}
 		addr = bt.Addr()
 		c.blobHash = bt.Hash()
@@ -124,25 +139,10 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	return c, nil
 }
 
-// endpointOptions returns the iroh.Bind options implementing the
-// configured relay mode.
-func (c *Client) endpointOptions() ([]iroh.Option, error) {
-	switch c.config.RelayMode {
-	case "default":
-		return nil, nil
-	case "disabled":
-		return []iroh.Option{iroh.WithRelayMode(relay.ModeDisabled())}, nil
-	case "forced":
-		u, err := netaddr.ParseRelayURL(c.config.RelayURL)
-		if err != nil {
-			return nil, fmt.Errorf("parse relayURL: %w", err)
-		}
-		return []iroh.Option{
-			iroh.WithRelayMode(relay.ModeCustomURLs(u)),
-			iroh.WithoutIPTransports(),
-		}, nil
-	}
-	return nil, fmt.Errorf("unknown relayMode %q", c.config.RelayMode)
+// bindOptions returns the backend-independent endpoint options
+// implementing the configured relay mode.
+func (c *Client) bindOptions() BindOptions {
+	return BindOptions{RelayMode: c.config.RelayMode, RelayURL: c.config.RelayURL}
 }
 
 // optsKey identifies the client's endpoint-affecting configuration for
@@ -153,28 +153,39 @@ func (c *Client) optsKey() string {
 
 // endpointFor returns the endpoint for the configured scope, binding it
 // on first use.
-func (c *Client) endpointFor(ctx context.Context) (*iroh.Endpoint, error) {
+func (c *Client) endpointFor(ctx context.Context) (BackendEndpoint, error) {
 	if c.config.EndpointScope == "shared" {
-		return c.root.sharedEndpoint(ctx, c.optsKey(), c.endpointOptions)
+		return c.root.sharedEndpoint(ctx, c.optsKey(), c.backend, c.bindOptions())
 	}
 	if c.endpoint != nil {
 		return c.endpoint, nil
 	}
-	opts, err := c.endpointOptions()
+	ep, err := c.backend.Bind(ctx, c.bindOptions())
 	if err != nil {
 		return nil, err
-	}
-	ep, err := iroh.Bind(ctx, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("bind endpoint: %w", err)
 	}
 	c.endpoint = ep
 	return ep, nil
 }
 
+// goEndpointFor returns the concrete go-iroh endpoint, for the workloads
+// the Backend interface does not cover. Backends whose bindings stop at
+// the endpoint layer cannot serve those, and say so by name.
+func (c *Client) goEndpointFor(ctx context.Context, workload string) (*iroh.Endpoint, error) {
+	ep, err := c.endpointFor(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ge, ok := ep.(interface{ endpoint() *iroh.Endpoint })
+	if !ok {
+		return nil, fmt.Errorf("impl %q does not support %s", c.config.Impl, workload)
+	}
+	return ge.endpoint(), nil
+}
+
 // tags returns the client's base tag set (peer plus any extra pairs).
 func (c *Client) tags(extra map[string]string) map[string]string {
-	out := map[string]string{"peer": c.config.Peer}
+	out := map[string]string{"peer": c.config.Peer, "impl": c.config.Impl}
 	for k, v := range extra {
 		out[k] = v
 	}
@@ -183,12 +194,12 @@ func (c *Client) tags(extra map[string]string) map[string]string {
 
 // connect returns the client's connection, dialing on first use, and
 // records iroh_dial_latency for each dial.
-func (c *Client) connect(ctx context.Context) (*iroh.Conn, error) {
+func (c *Client) connect(ctx context.Context) (BackendConn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
 		select {
-		case <-c.conn.Context().Done():
+		case <-c.conn.Done():
 			c.conn = nil // connection died; redial
 		default:
 			return c.conn, nil
@@ -199,9 +210,9 @@ func (c *Client) connect(ctx context.Context) (*iroh.Conn, error) {
 		return nil, err
 	}
 	start := time.Now()
-	conn, err := ep.Connect(ctx, c.target, c.config.ALPN)
+	conn, err := ep.Connect(ctx, c.config.Target, c.config.ALPN)
 	if err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
+		return nil, err
 	}
 	c.metrics.push(c.vu, c.metrics.dialLatency, metricsDuration(time.Since(start)), c.tags(nil))
 	c.conn = conn
@@ -316,7 +327,7 @@ func (c *Client) SendStreams(opts StreamOpts) (StreamResult, error) {
 	if firstErr != nil {
 		res.Error = firstErr.Error()
 	}
-	c.root.recordTransfer(c.config.Peer, opts, res, wall, outcomes)
+	c.root.recordTransfer(c.config.Peer, c.config.Impl, opts, res, wall, outcomes)
 	return res, nil
 }
 
@@ -397,7 +408,7 @@ func (c *Client) EchoDatagrams(opts DatagramOpts) (DatagramResult, error) {
 // awaitEcho reads datagrams until one carries seq or the timeout lapses.
 // It reports false (no error) on timeout: datagram loss is an expected
 // outcome, not a failure.
-func (c *Client) awaitEcho(ctx context.Context, conn *iroh.Conn, seq uint64, timeout time.Duration) (bool, error) {
+func (c *Client) awaitEcho(ctx context.Context, conn BackendConn, seq uint64, timeout time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	for {
@@ -425,7 +436,7 @@ func (c *Client) MetricsSnapshot() (map[string]uint64, error) {
 	c.mu.Unlock()
 	if c.config.EndpointScope == "shared" {
 		var err error
-		ep, err = c.root.sharedEndpoint(c.vu.Context(), c.optsKey(), c.endpointOptions)
+		ep, err = c.root.sharedEndpoint(c.vu.Context(), c.optsKey(), c.backend, c.bindOptions())
 		if err != nil {
 			return nil, err
 		}
@@ -433,17 +444,9 @@ func (c *Client) MetricsSnapshot() (map[string]uint64, error) {
 	if ep == nil {
 		return nil, fmt.Errorf("no endpoint bound yet")
 	}
-	s := ep.Metrics().Socket
-	counters := map[string]uint64{
-		"relaySent":    s.SendRelay,
-		"relayRecv":    s.RecvDataRelay,
-		"directSentV4": s.SendIPv4,
-		"directSentV6": s.SendIPv6,
-		"directRecvV4": s.RecvDataIPv4,
-		"directRecvV6": s.RecvDataIPv6,
-		"blackholed":   s.SendBlackholed,
-		"pathsDirect":  s.PathsDirect,
-		"pathsRelay":   s.PathsRelay,
+	counters := ep.Counters()
+	if counters == nil {
+		return nil, fmt.Errorf("impl %q does not expose socket counters", c.config.Impl)
 	}
 	var delta map[string]uint64
 	if c.config.EndpointScope == "shared" {
@@ -497,13 +500,13 @@ var clientStreamDebug = sync.OnceValue(func() *StreamDebug {
 	return d
 })
 
-func sendOneStream(ctx context.Context, conn *iroh.Conn, total int64, msgSize int) streamOutcome {
+func sendOneStream(ctx context.Context, conn BackendConn, total int64, msgSize int) streamOutcome {
 	start := time.Now()
 	probe := clientStreamDebug().Register()
 	defer probe.Done()
 	probe.SetPhase("open")
 	probe.BeginOp()
-	s, err := conn.OpenStreamSync(ctx)
+	s, err := conn.OpenStream(ctx)
 	probe.EndOp(0)
 	if err != nil {
 		return streamOutcome{err: fmt.Errorf("open stream: %w", err), stage: "open"}
@@ -531,7 +534,7 @@ func sendOneStream(ctx context.Context, conn *iroh.Conn, total int64, msgSize in
 	}
 	probe.SetPhase("close")
 	probe.BeginOp()
-	err = s.Close()
+	err = s.CloseWrite()
 	probe.EndOp(0)
 	if err != nil {
 		return streamOutcome{sent: sent, duration: time.Since(start), err: fmt.Errorf("close stream: %w", err), stage: "close"}
@@ -554,7 +557,7 @@ func (c *Client) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
-		c.conn.CloseWithError(0, "done")
+		_ = c.conn.CloseWithError(0, "done")
 		c.conn = nil
 	}
 	if c.endpoint != nil {
@@ -624,6 +627,9 @@ func (c *Client) FetchBlob(opts FetchOpts) (FetchResult, error) {
 	if opts.StallMs <= 0 {
 		opts.StallMs = 30000
 	}
+	if !c.backend.Capabilities().Blobs {
+		return res, fmt.Errorf("impl %q does not support the blobs scenarios", c.config.Impl)
+	}
 	ctx, cancel := context.WithTimeout(c.vu.Context(), time.Duration(opts.TimeoutMs)*time.Millisecond)
 	defer cancel()
 	tags := c.tags(nil)
@@ -638,7 +644,7 @@ func (c *Client) FetchBlob(opts FetchOpts) (FetchResult, error) {
 	defer probe.Done()
 	probe.SetPhase("open")
 	probe.BeginOp()
-	s, err := conn.OpenStreamSync(ctx)
+	s, err := conn.OpenStream(ctx)
 	probe.EndOp(0)
 	if err != nil {
 		c.metrics.push(c.vu, c.metrics.errors, 1, withStage(tags, "open"))
@@ -676,6 +682,10 @@ func (c *Client) FetchBlob(opts FetchOpts) (FetchResult, error) {
 	}
 
 	start := time.Now()
+	bs, ok := s.(interface{ stream() *iroh.Stream })
+	if !ok {
+		return res, fmt.Errorf("impl %q does not support the blobs scenarios", c.config.Impl)
+	}
 	probe.SetPhase("fetch")
 	probe.BeginOp()
 	if c.blobFormat.IsHashSeq() {
@@ -683,13 +693,13 @@ func (c *Client) FetchBlob(opts FetchOpts) (FetchResult, error) {
 		// blob on one stream.
 		var coll blobs.Collection
 		var children [][]byte
-		coll, children, err = blobs.GetCollectionBytes(stallCtx, s, c.blobHash)
+		coll, children, err = blobs.GetCollectionBytes(stallCtx, bs.stream(), c.blobHash)
 		for _, b := range children {
 			pw.Write(b)
 		}
 		res.Entries = coll.Len()
 	} else {
-		err = blobs.DownloadBlob(stallCtx, s, c.blobHash, pw)
+		err = blobs.DownloadBlob(stallCtx, bs.stream(), c.blobHash, pw)
 	}
 	wall := time.Since(start)
 	probe.EndOp(0)
@@ -758,7 +768,7 @@ func (c *Client) Request(opts RequestOpts) (RequestResult, error) {
 		return res, nil
 	}
 	start := time.Now()
-	s, err := conn.OpenStreamSync(ctx)
+	s, err := conn.OpenStream(ctx)
 	if err != nil {
 		c.metrics.push(c.vu, c.metrics.errors, 1, withStage(tags, "open"))
 		res.Error = err.Error()
@@ -776,7 +786,7 @@ func (c *Client) Request(opts RequestOpts) (RequestResult, error) {
 		res.Error = err.Error()
 		return res, nil
 	}
-	if err := s.Close(); err != nil {
+	if err := s.CloseWrite(); err != nil {
 		c.metrics.push(c.vu, c.metrics.errors, 1, withStage(tags, "close"))
 		res.Error = err.Error()
 		return res, nil

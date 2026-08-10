@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/grafana/sobek"
-	"github.com/tmc/go-iroh/iroh"
 	"go.k6.io/k6/v2/js/common"
 	"go.k6.io/k6/v2/js/modules"
 )
@@ -19,7 +18,7 @@ type (
 	// k6 process exits, which is the k6 lifecycle for RootModule state.
 	RootModule struct {
 		mu         sync.Mutex
-		endpoint   *iroh.Endpoint // endpointScope: "shared"
+		endpoint   BackendEndpoint // endpointScope: "shared"
 		epErr      error
 		epOnce     sync.Once
 		epOptsKey  string            // relay options the endpoint was bound with
@@ -155,20 +154,12 @@ func (mi *ModuleInstance) Exports() modules.Exports {
 // first use with the options of the first caller. optsKey identifies
 // the caller's relay configuration; a later caller with a different
 // configuration gets an error instead of a silently wrong endpoint.
-func (root *RootModule) sharedEndpoint(ctx context.Context, optsKey string, options func() ([]iroh.Option, error)) (*iroh.Endpoint, error) {
+func (root *RootModule) sharedEndpoint(ctx context.Context, optsKey string, backend Backend, opts BindOptions) (BackendEndpoint, error) {
 	root.epOnce.Do(func() {
 		root.mu.Lock()
 		defer root.mu.Unlock()
-		opts, err := options()
-		if err != nil {
-			root.epErr = err
-			return
-		}
 		root.epOptsKey = optsKey
-		root.endpoint, root.epErr = iroh.Bind(context.WithoutCancel(ctx), opts...)
-		if root.epErr != nil {
-			root.epErr = fmt.Errorf("bind shared endpoint: %w", root.epErr)
-		}
+		root.endpoint, root.epErr = backend.Bind(context.WithoutCancel(ctx), opts)
 	})
 	if root.epErr == nil && optsKey != root.epOptsKey {
 		return nil, fmt.Errorf("shared endpoint already bound with options %q, client wants %q", root.epOptsKey, optsKey)
