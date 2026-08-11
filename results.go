@@ -52,6 +52,14 @@ type resultLine struct {
 	// SinkTokio is the tokio runtime flavor for a Rust-backed sink. It
 	// is empty for a Go sink, which has no such knob.
 	SinkTokio string `json:"sink_tokio,omitempty"`
+	// SinkFlowControl declares whether the sink's QUIC receive windows
+	// were left at the stack's shipped defaults or matched across
+	// implementations. The two are different experiments -- "how do the
+	// stacks perform as shipped" and "how do the receive paths compare
+	// at equal windows" -- and their samples must never pool. The
+	// windows are unmatched today and 2.4x apart at the stream level,
+	// unbounded vs 15 MiB at the connection level; see CONFOUNDS.md.
+	SinkFlowControl string `json:"sink_flow_control,omitempty"`
 
 	Host      string `json:"host"`
 	Seed      string `json:"seed,omitempty"`
@@ -81,6 +89,8 @@ type resultLog struct {
 	sinkVersion string
 	sinkReadBuf int
 	sinkTokio   string
+
+	sinkFlowControl string
 }
 
 // open lazily opens the JSONL file; it reports false when JSONL output
@@ -117,6 +127,7 @@ func (l *resultLog) open() bool {
 	l.sinkVersion = l.env("PERFLAB_SINK_VERSION")
 	l.sinkReadBuf, _ = strconv.Atoi(l.env("PERFLAB_SINK_READ_BUF"))
 	l.sinkTokio = l.env("PERFLAB_SINK_TOKIO")
+	l.sinkFlowControl = l.env("PERFLAB_SINK_FLOW_CONTROL")
 	host, _ := os.Hostname()
 	l.host = fmt.Sprintf("%s/%s/%s", runtime.GOOS, runtime.GOARCH, host)
 	return true
@@ -224,10 +235,11 @@ func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res S
 		GoIroh:   l.goIroh,
 		RustIroh: l.rustIroh,
 
-		SinkImpl:    l.sinkImpl,
-		SinkVersion: l.sinkVersion,
-		SinkReadBuf: l.sinkReadBuf,
-		SinkTokio:   l.sinkTokio,
+		SinkImpl:        l.sinkImpl,
+		SinkVersion:     l.sinkVersion,
+		SinkReadBuf:     l.sinkReadBuf,
+		SinkTokio:       l.sinkTokio,
+		SinkFlowControl: l.sinkFlowControl,
 
 		Host:      l.host,
 		Seed:      l.seed,
