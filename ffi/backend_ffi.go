@@ -1,23 +1,3 @@
-// Package xk6irohffi registers the "ffi" backend with the perflab k6
-// extension: Go driving Rust iroh through iroh-go's uniffi/cgo bindings.
-//
-// It is a separate module from xk6-iroh on purpose. A build-tagged file
-// inside that module would still put iroh-go and its vendored static
-// libraries into its go.mod and go.sum for every consumer, tag or no
-// tag, because go mod tidy resolves across build configurations. Keeping
-// it here means
-//
-//	xk6 build --with github.com/tmc/go-iroh-perflab/xk6-iroh
-//
-// stays pure Go with no Rust toolchain, and a build that wants both
-// implementations adds a second --with:
-//
-//	xk6 build --with github.com/tmc/go-iroh-perflab/xk6-iroh=./xk6-iroh \
-//	          --with github.com/tmc/go-iroh-perflab/xk6-iroh-ffi=./xk6-iroh-ffi
-//
-// Scripts then select it with impl: 'ffi'. See README.md for what this
-// backend cannot do, which is a shorter list to read before trusting a
-// number than to discover afterwards.
 package xk6irohffi
 
 import (
