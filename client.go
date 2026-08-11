@@ -63,8 +63,8 @@ type Client struct {
 	hasBlob    bool
 
 	mu         sync.Mutex
-	endpoint   BackendEndpoint // vu-scoped endpoint, lazily bound
-	conn       BackendConn
+	endpoint   Endpoint // vu-scoped endpoint, lazily bound
+	conn       Conn
 	lastSocket map[string]uint64 // counters emitted by the last MetricsSnapshot
 
 	gossip       *gossip.Gossip // lazily created by Gossip
@@ -153,7 +153,7 @@ func (c *Client) optsKey() string {
 
 // endpointFor returns the endpoint for the configured scope, binding it
 // on first use.
-func (c *Client) endpointFor(ctx context.Context) (BackendEndpoint, error) {
+func (c *Client) endpointFor(ctx context.Context) (Endpoint, error) {
 	if c.config.EndpointScope == "shared" {
 		return c.root.sharedEndpoint(ctx, c.optsKey(), c.backend, c.bindOptions())
 	}
@@ -194,7 +194,7 @@ func (c *Client) tags(extra map[string]string) map[string]string {
 
 // connect returns the client's connection, dialing on first use, and
 // records iroh_dial_latency for each dial.
-func (c *Client) connect(ctx context.Context) (BackendConn, error) {
+func (c *Client) connect(ctx context.Context) (Conn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn != nil {
@@ -408,7 +408,7 @@ func (c *Client) EchoDatagrams(opts DatagramOpts) (DatagramResult, error) {
 // awaitEcho reads datagrams until one carries seq or the timeout lapses.
 // It reports false (no error) on timeout: datagram loss is an expected
 // outcome, not a failure.
-func (c *Client) awaitEcho(ctx context.Context, conn BackendConn, seq uint64, timeout time.Duration) (bool, error) {
+func (c *Client) awaitEcho(ctx context.Context, conn Conn, seq uint64, timeout time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	for {
@@ -500,7 +500,7 @@ var clientStreamDebug = sync.OnceValue(func() *StreamDebug {
 	return d
 })
 
-func sendOneStream(ctx context.Context, conn BackendConn, total int64, msgSize int) streamOutcome {
+func sendOneStream(ctx context.Context, conn Conn, total int64, msgSize int) streamOutcome {
 	start := time.Now()
 	probe := clientStreamDebug().Register()
 	defer probe.Done()

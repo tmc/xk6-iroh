@@ -26,7 +26,7 @@ func (goBackend) Capabilities() Capabilities {
 	return Capabilities{Blobs: true, Gossip: true}
 }
 
-func (goBackend) Bind(ctx context.Context, opts BindOptions) (BackendEndpoint, error) {
+func (goBackend) Bind(ctx context.Context, opts BindOptions) (Endpoint, error) {
 	irohOpts, err := goBindOptions(opts)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ type goEndpoint struct{ ep *iroh.Endpoint }
 // need more than the Backend interface offers, namely blobs and gossip.
 func (e *goEndpoint) endpoint() *iroh.Endpoint { return e.ep }
 
-func (e *goEndpoint) Connect(ctx context.Context, ticket, alpn string) (BackendConn, error) {
+func (e *goEndpoint) Connect(ctx context.Context, ticket, alpn string) (Conn, error) {
 	addr, err := endpointticket.Decode(ticket)
 	if err != nil {
 		return nil, fmt.Errorf("decode target ticket: %w", err)
@@ -102,7 +102,7 @@ func goSocketCounters(ep *iroh.Endpoint) map[string]uint64 {
 
 type goConn struct{ conn *iroh.Conn }
 
-func (c goConn) OpenStream(ctx context.Context) (BackendStream, error) {
+func (c goConn) OpenStream(ctx context.Context) (Stream, error) {
 	s, err := c.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, err

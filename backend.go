@@ -31,7 +31,7 @@ type Backend interface {
 	// Capabilities reports which workloads the backend can serve.
 	Capabilities() Capabilities
 	// Bind creates an endpoint.
-	Bind(ctx context.Context, opts BindOptions) (BackendEndpoint, error)
+	Bind(ctx context.Context, opts BindOptions) (Endpoint, error)
 }
 
 // Capabilities describes what a backend can serve beyond streams and
@@ -54,9 +54,9 @@ type BindOptions struct {
 	RelayURL string
 }
 
-// BackendEndpoint is a bound endpoint.
-type BackendEndpoint interface {
-	Connect(ctx context.Context, ticket, alpn string) (BackendConn, error)
+// An Endpoint is a bound endpoint, as returned by Backend.Bind.
+type Endpoint interface {
+	Connect(ctx context.Context, ticket, alpn string) (Conn, error)
 	// Counters returns socket-level counters by the names
 	// Client.MetricsSnapshot reports (relaySent, relayRecv, pathsRelay
 	// and friends), or nil when the backend does not expose them.
@@ -64,9 +64,9 @@ type BackendEndpoint interface {
 	Shutdown(ctx context.Context) error
 }
 
-// BackendConn is a connection to the target peer.
-type BackendConn interface {
-	OpenStream(ctx context.Context) (BackendStream, error)
+// A Conn is a connection to the target peer.
+type Conn interface {
+	OpenStream(ctx context.Context) (Stream, error)
 	SendDatagram(p []byte) error
 	ReadDatagram(ctx context.Context) ([]byte, error)
 	// MaxDatagramSize reports the peer's limit, false if unknown.
@@ -76,10 +76,10 @@ type BackendConn interface {
 	CloseWithError(code uint64, reason string) error
 }
 
-// BackendStream is one bidirectional stream. CloseWrite finishes the
+// A Stream is one bidirectional stream. CloseWrite finishes the
 // sending half; the peer then sees EOF, and reading to EOF afterwards is
 // how the client observes that the peer drained the stream.
-type BackendStream interface {
+type Stream interface {
 	io.ReadWriter
 	SetDeadline(t time.Time) error
 	CloseWrite() error

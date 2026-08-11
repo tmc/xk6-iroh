@@ -18,7 +18,7 @@ type (
 	// k6 process exits, which is the k6 lifecycle for RootModule state.
 	RootModule struct {
 		mu         sync.Mutex
-		endpoint   BackendEndpoint // endpointScope: "shared"
+		endpoint   Endpoint // endpointScope: "shared"
 		epErr      error
 		epOnce     sync.Once
 		epOptsKey  string            // relay options the endpoint was bound with
@@ -154,7 +154,7 @@ func (mi *ModuleInstance) Exports() modules.Exports {
 // first use with the options of the first caller. optsKey identifies
 // the caller's relay configuration; a later caller with a different
 // configuration gets an error instead of a silently wrong endpoint.
-func (root *RootModule) sharedEndpoint(ctx context.Context, optsKey string, backend Backend, opts BindOptions) (BackendEndpoint, error) {
+func (root *RootModule) sharedEndpoint(ctx context.Context, optsKey string, backend Backend, opts BindOptions) (Endpoint, error) {
 	root.epOnce.Do(func() {
 		root.mu.Lock()
 		defer root.mu.Unlock()

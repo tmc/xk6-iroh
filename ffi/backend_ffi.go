@@ -47,7 +47,7 @@ func (Backend) Capabilities() perflab.Capabilities {
 	return perflab.Capabilities{Blobs: false, Gossip: false}
 }
 
-func (Backend) Bind(_ context.Context, opts perflab.BindOptions) (perflab.BackendEndpoint, error) {
+func (Backend) Bind(_ context.Context, opts perflab.BindOptions) (perflab.Endpoint, error) {
 	// The context is unused throughout this backend: every binding call
 	// is a blocking FFI call with no cancellation, so a bind or a read
 	// cannot be interrupted by a cancelled context. Callers bound work
@@ -87,7 +87,7 @@ func (Backend) Bind(_ context.Context, opts perflab.BindOptions) (perflab.Backen
 
 type endpoint struct{ ep *iroh.Endpoint }
 
-func (e *endpoint) Connect(_ context.Context, ticket, alpn string) (perflab.BackendConn, error) {
+func (e *endpoint) Connect(_ context.Context, ticket, alpn string) (perflab.Conn, error) {
 	addr, err := endpointAddr(ticket)
 	if err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func newConn(c *iroh.Connection) *conn {
 	return k
 }
 
-func (k *conn) OpenStream(context.Context) (perflab.BackendStream, error) {
+func (k *conn) OpenStream(context.Context) (perflab.Stream, error) {
 	bi, err := k.c.OpenBi()
 	if err != nil {
 		return nil, irohErr(err)
