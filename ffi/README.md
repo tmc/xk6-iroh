@@ -43,6 +43,45 @@ always records which implementation generated its load. Selecting `ffi`
 from a k6 built without this module is an error naming the backends that
 binary does have — never a silent fallback to go-iroh.
 
+## This backend is not currently reliable as a load generator
+
+⚠ As of 2026-08-11 the `ffi` **client** fails roughly half the time at
+4 streams × 4 MiB on darwin loopback. The failure is always the same
+shape: zero streams opened, the sink's accept loop idle throughout, no
+bytes moved anywhere. It never gets as far as opening a stream.
+
+Measured, fresh sink every run:
+
+| duration | pass | fail |
+| --- | --- | --- |
+| 6 s | 8 | 0 |
+| 8 s | 4 | 6 |
+| 12 s | 2 | 0 |
+
+Duration-correlated but not duration-determined, and six points are not
+a mechanism — the cause is unknown and under investigation. What is
+solid: the `go` client has never failed in any configuration here or
+across cell B, and the failure is not sink reuse or residue from a prior
+client (a fresh sink with no prior client at all reproduces it, and the
+same client passes then fails on one reused sink).
+
+Two consequences matter more than the bug:
+
+- **On failure k6 never exits.** SIGTERM is ignored; every occurrence
+  needed SIGKILL. An unattended run hangs forever on the first failure
+  rather than failing.
+- **When it is not killed it exits 0**, reporting `0 out of 0`. A run
+  that transferred nothing looks like a pass and emits no row, so
+  anything downstream sees absence rather than breakage. The scenario
+  gates now catch this (`iroh_bytes_sent: ['count>0']`), and the compare
+  harness catches the no-row case with `-want`; neither existed when
+  this bug was found.
+
+Until this is diagnosed, treat `impl: 'ffi'` as a diagnostic tool rather
+than a load generator, and never read a passing ffi-client cell without
+checking it produced samples. The ffi **sink** (`ffi-peer/`) is
+unaffected — every cell measured to date drove it with the `go` client.
+
 ## What this backend cannot do
 
 Read this before trusting a number from it.
