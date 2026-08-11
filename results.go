@@ -117,7 +117,7 @@ func goIrohVersion() string {
 // side is always the go-iroh k6 extension, so "go" and "rust" name the
 // GG/GR cells. Any other label (e.g. an A/B pair like "base" and
 // "perfopt" comparing two go-iroh builds) passes through verbatim so
-// analysis/compare can pair the arms.
+// cmd/perflab-compare can pair the arms.
 func cellName(peer string) string {
 	switch peer {
 	case "go":

@@ -52,7 +52,7 @@
 // With the PERFLAB_JSONL environment variable set, every sendStreams
 // fan-out appends one line of JSONL (rung/lang/sample/bytes/duration_ns
 // plus provenance), a schema shared with go-iroh's benchmark
-// harness so runs from both can be analyzed together; analysis/compare
+// harness so runs from both can be analyzed together; cmd/perflab-compare
 // summarizes two runs without applying statistics.
 //
 // The target peer is cmd/perflab-server (Go) or rust-peer (pinned Rust
