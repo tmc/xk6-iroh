@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 )
@@ -94,23 +95,58 @@ func (l *resultLog) env(key string) string {
 	return os.Getenv(key)
 }
 
-// goIrohVersion reports the go-iroh module version baked into the
-// binary, including any replace directive target.
+// goIrohCommit is stamped at link time by the Makefile with the commit
+// the go-iroh checkout was at:
+//
+//	-ldflags "-X github.com/tmc/go-iroh-perflab/xk6-iroh.goIrohCommit=$sha"
+//
+// A module build needs no stamp -- the pseudo-version already carries the
+// commit -- but a replace directive erases it, and a replace is how every
+// A/B pair is built.
+var goIrohCommit string
+
+// goIrohVersion reports which go-iroh produced the run.
+//
+// A replaced module reports version "(devel)" and a filesystem path, so
+// the build info alone identifies an A/B arm only by the directory
+// someone happened to build it in -- and those directories outlive
+// neither the session nor the comparison. Without a stamp this says
+// UNSTAMPED rather than printing the path, because a comparison whose
+// arms cannot be named is not a comparison, and a plausible-looking
+// string is worse than an admitted gap.
 func goIrohVersion() string {
-	bi, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "unknown"
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range bi.Deps {
+			if dep.Path == "github.com/tmc/go-iroh" {
+				return irohVersion(dep, goIrohCommit)
+			}
+		}
 	}
-	for _, dep := range bi.Deps {
-		if dep.Path != "github.com/tmc/go-iroh" {
-			continue
+	return irohVersion(nil, goIrohCommit)
+}
+
+// irohVersion is the decision goIrohVersion makes, separated from the
+// build info it reads so the cases a single binary cannot exhibit are
+// still testable.
+func irohVersion(dep *debug.Module, stamp string) string {
+	switch {
+	case dep == nil:
+		if stamp != "" {
+			return stamp
 		}
-		if dep.Replace != nil {
-			return fmt.Sprintf("%s (replace %s@%s)", dep.Version, dep.Replace.Path, dep.Replace.Version)
+		return "unknown"
+	case dep.Replace != nil:
+		if stamp != "" {
+			return stamp
 		}
+		return fmt.Sprintf("UNSTAMPED (replace %s)", dep.Replace.Path)
+	case stamp != "" && !strings.Contains(dep.Version, stamp):
+		// The stamp and the module disagree about what was built.
+		// Report both rather than picking one.
+		return fmt.Sprintf("%s (stamped %s)", dep.Version, stamp)
+	default:
 		return dep.Version
 	}
-	return "unknown"
 }
 
 // cellName maps a peer label to its comparison-cell name: the client
