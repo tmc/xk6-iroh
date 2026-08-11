@@ -68,13 +68,29 @@ descriptive medians, **NOT statistically gated**) measured the slope from
 Both native stacks hold or gain where the FFI arm loses a quarter, and
 the sample counts say the same thing without the throughput metric: 208
 fan-outs completed for ffi against 280 and 284 native in the same 60 s.
+At 16 streams the ffi arm's run ranges are disjoint from both native
+arms, so that separation holds under the stricter reading; the medians
+in the table are pooled across runs and are the weaker statement.
+
+Repeatability points the same way as throughput. At 4 streams the FFI
+arm is the least repeatable of the three (±4.9% against ±0.4% and
+±0.5%), and at 16 it narrows to ±3.6% while separating cleanly. The arm
+that cannot be placed at all is the FFI arm, at the rung where the
+boundary is supposedly nearly free — which is what contention for a
+thread per in-flight stream would look like, and is the reason item 5 of
+`MEASUREMENT-PLAN.md` measures threads instead of inferring them.
 
 Two corrections that matter more than the headline:
 
-- **At 4 streams the order inverts** and the spread collapses to about
-  4% — ffi (243.47) is ahead of gr (236.95). So there is no such thing as
-  "the FFI penalty"; any single-shape ratio is an artifact of the shape
-  picked. The concurrency *slope* is the durable finding, not a ratio.
+- **At 4 streams the FFI arm cannot be ordered against anything.** Its
+  own repeat range there (237.10–261.79, ±4.9%) contains both native arms
+  outright, where those arms sit at ±0.4% and ±0.5%. So no ffi comparison
+  on that rung — ahead or behind — may be stated. What survives is a
+  bound, not an ordering: all three sinks within about 4%. There is
+  therefore no such thing as "the FFI penalty"; any single-shape ratio is
+  an artifact of the shape picked, and the concurrency *slope* is the
+  durable finding. The one ordering that does hold at 4 streams is gg
+  ahead of gr, ratio 0.960, run ranges disjoint.
 - **Small writes are not where this hurts.** 1 KiB writes cost the FFI
   arm about 5.5% against the native median; concurrency costs it 26%.
   Cell A's 2.05× at 1 KiB was mostly concurrency wearing a small-write
