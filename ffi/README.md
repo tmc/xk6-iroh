@@ -58,12 +58,38 @@ Measured, fresh sink every run:
 | 8 s | 4 | 6 |
 | 12 s | 2 | 0 |
 
-Duration-correlated but not duration-determined, and six points are not
-a mechanism — the cause is unknown and under investigation. What is
-solid: the `go` client has never failed in any configuration here or
-across cell B, and the failure is not sink reuse or residue from a prior
-client (a fresh sink with no prior client at all reproduces it, and the
-same client passes then fails on one reused sink).
+Duration-correlated but not duration-determined. The `go` client has
+never failed in any configuration here or across cell B, and the failure
+is not sink reuse or residue from a prior client — a fresh sink with no
+prior client at all reproduces it, and the same client passes then fails
+on one reused sink.
+
+**Cause: a uniffi async completion callback that never fires.** A
+SIGQUIT dump at the hang (43 goroutines) shows two `Connection.OpenBi`
+calls and the `Connection.Closed` watchdog all blocked in
+`chanrecv` inside `uniffiRustCallAsync` (`iroh_ffi.go:9796`), all three
+on the *same* connection pointer. **Zero goroutines are inside cgo** —
+no `runtime.cgocall`, no `_Cfunc_` frame anywhere in the dump. Nothing
+is executing Rust. The Go side has already returned from the FFI call
+and is parked on a Go channel waiting for a completion that never
+arrives.
+
+Two things follow. The defect is connection-wide rather than specific to
+opening a stream — the `Closed` watchdog hanging on the same pointer is
+the tell — so every outstanding async call on an affected connection
+hangs. And it is **unrecoverable by construction**: `uniffiRustCallAsync`
+waits on a bare channel with no timeout and no cancellation, so nothing
+can unwind those goroutines. That is why the process ignores SIGTERM.
+
+This is the missing `context.Context` (see the table below) surfacing as
+a liveness bug rather than an ergonomic one. It is a defect in the
+bindings, not in this backend, not in go-iroh, and not in the transport.
+
+Note what it is *not*: it is not the same mechanism as the sink-side
+concurrency ceiling. That is threads consumed by blocking reads with
+work in flight; this hangs with zero streams in flight and nothing in
+cgo. What the two share is only the absence of cancellation, which turns
+both into unbounded waits instead of errors.
 
 Two consequences matter more than the bug:
 
