@@ -3,6 +3,7 @@ package perflab
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,11 +79,20 @@ func (c *Client) Gossip(opts GossipOpts) (GossipResult, error) {
 		return fail("join", err)
 	}
 
+	// Take the topic and echo channel once, under the lock that Close
+	// clears them under. Reading the fields directly would race a Close
+	// on another goroutine, and the failure would be a nil dereference in
+	// the middle of a run rather than an error the scenario can report.
+	topic, echoes := c.gossipHandles()
+	if topic == nil {
+		return fail("join", errors.New("client closed"))
+	}
+
 	// Drain echoes queued by a previous iteration so stale replies are
 	// not matched against this round's sequence numbers.
 	for {
 		select {
-		case <-c.gossipEchoes:
+		case <-echoes:
 			continue
 		default:
 		}
@@ -100,14 +110,14 @@ func (c *Client) Gossip(opts GossipOpts) (GossipResult, error) {
 		now := time.Now()
 		binary.BigEndian.PutUint64(payload[1:], seq)
 		binary.BigEndian.PutUint64(payload[9:], uint64(now.UnixNano()))
-		if err := c.gossipTopic.Broadcast(ctx, payload); err != nil {
+		if err := topic.Broadcast(ctx, payload); err != nil {
 			res.Lost = opts.Count - res.Echoed
 			r, _ := fail("broadcast", fmt.Errorf("broadcast seq %d: %w", seq, err))
 			return r, nil
 		}
 		sent[seq] = now
 		res.Sent++
-		c.collectEchoes(sent, &res)
+		c.collectEchoes(echoes, sent, &res)
 		if interval > 0 && seq < uint64(opts.Count) {
 			deadline.Reset(interval)
 			select {
@@ -123,7 +133,7 @@ func (c *Client) Gossip(opts GossipOpts) (GossipResult, error) {
 	// Wait for outstanding echoes until the timeout.
 	for len(sent) > 0 && ctx.Err() == nil {
 		select {
-		case p := <-c.gossipEchoes:
+		case p := <-echoes:
 			c.matchEcho(p, sent, &res)
 		case <-ctx.Done():
 		}
@@ -136,6 +146,14 @@ func (c *Client) Gossip(opts GossipOpts) (GossipResult, error) {
 		res.Error = fmt.Sprintf("%d of %d messages not echoed within timeout", res.Lost, res.Sent)
 	}
 	return res, nil
+}
+
+// gossipHandles returns the joined topic and its echo channel, or nil if
+// the client has been closed.
+func (c *Client) gossipHandles() (*gossip.Topic, chan []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gossipTopic, c.gossipEchoes
 }
 
 // joinGossip creates the client's gossip instance and joins topicName
@@ -184,10 +202,10 @@ func (c *Client) joinGossip(ctx context.Context, topicName string) error {
 }
 
 // collectEchoes drains any echoes received so far without blocking.
-func (c *Client) collectEchoes(sent map[uint64]time.Time, res *GossipResult) {
+func (c *Client) collectEchoes(echoes chan []byte, sent map[uint64]time.Time, res *GossipResult) {
 	for {
 		select {
-		case p := <-c.gossipEchoes:
+		case p := <-echoes:
 			c.matchEcho(p, sent, res)
 		default:
 			return

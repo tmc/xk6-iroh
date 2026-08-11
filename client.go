@@ -574,19 +574,34 @@ func sendOneStream(ctx context.Context, conn Conn, total int64, msgSize int) str
 
 // Close closes the client's connection and vu-scoped endpoint. Shared
 // endpoints stay open for other VUs.
+// The lock is held only to take the handles, not across the teardown
+// itself: Shutdown blocks for up to five seconds, and holding the mutex
+// through it stalls any concurrent MetricsSnapshot at exactly the moment
+// end-of-iteration metrics are collected. Nothing below reads client
+// state, so the copy is all the exclusion this needs.
+//
+// The gossip topic is closed here too. It owns a goroutine ranging over
+// its event channel, and a client that closed without ending it leaked
+// one goroutine and a 1024-slot channel per iteration -- and under a
+// shared endpoint, which stays open on purpose, nothing ever ended it.
 func (c *Client) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		_ = c.conn.CloseWithError(0, "done")
-		c.conn = nil
+	conn, ep, topic := c.conn, c.endpoint, c.gossipTopic
+	c.conn, c.endpoint, c.gossipTopic = nil, nil, nil
+	c.gossip, c.gossipEchoes = nil, nil
+	c.mu.Unlock()
+
+	if conn != nil {
+		_ = conn.CloseWithError(0, "done")
 	}
-	if c.endpoint != nil {
+	if topic != nil {
+		// Closing the topic ends Events, which returns the pump.
+		_ = topic.Close()
+	}
+	if ep != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		err := c.endpoint.Shutdown(ctx)
-		c.endpoint = nil
-		if err != nil {
+		if err := ep.Shutdown(ctx); err != nil {
 			return fmt.Errorf("shutdown endpoint: %w", err)
 		}
 	}
