@@ -18,9 +18,7 @@ type (
 	// k6 process exits, which is the k6 lifecycle for RootModule state.
 	RootModule struct {
 		mu         sync.Mutex
-		endpoint   Endpoint // endpointScope: "shared"
-		epErr      error
-		epOnce     sync.Once
+		endpoint   Endpoint          // endpointScope: "shared"
 		epOptsKey  string            // relay options the endpoint was bound with
 		lastShared map[string]uint64 // shared-endpoint socket counter baseline
 		results    resultLog
@@ -154,17 +152,25 @@ func (mi *ModuleInstance) Exports() modules.Exports {
 // first use with the options of the first caller. optsKey identifies
 // the caller's relay configuration; a later caller with a different
 // configuration gets an error instead of a silently wrong endpoint.
+//
+// A failed bind is not remembered. Binding under sync.Once meant that a
+// transient failure for the first VU to arrive — a port still in
+// TIME_WAIT, a relay not yet up — was returned to every later VU for
+// the rest of the run, turning a retryable error into a dead test.
 func (root *RootModule) sharedEndpoint(ctx context.Context, optsKey string, backend Backend, opts BindOptions) (Endpoint, error) {
-	root.epOnce.Do(func() {
-		root.mu.Lock()
-		defer root.mu.Unlock()
-		root.epOptsKey = optsKey
-		root.endpoint, root.epErr = backend.Bind(context.WithoutCancel(ctx), opts)
-	})
-	if root.epErr == nil && optsKey != root.epOptsKey {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	if root.endpoint == nil {
+		ep, err := backend.Bind(context.WithoutCancel(ctx), opts)
+		if err != nil {
+			return nil, err
+		}
+		root.endpoint, root.epOptsKey = ep, optsKey
+	}
+	if optsKey != root.epOptsKey {
 		return nil, fmt.Errorf("shared endpoint already bound with options %q, client wants %q", root.epOptsKey, optsKey)
 	}
-	return root.endpoint, root.epErr
+	return root.endpoint, nil
 }
 
 // sharedSocketDelta returns the change in the shared endpoint's socket
