@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,12 +26,33 @@ type resultLine struct {
 	FlowBytes      []int64 `json:"flow_bytes,omitempty"`
 	FlowDurationNS []int64 `json:"flow_duration_ns,omitempty"`
 
-	Schema    string `json:"schema"`
-	Scenario  string `json:"scenario"`
-	Peer      string `json:"peer"`
-	Impl      string `json:"impl"`
-	GoIroh    string `json:"go_iroh"`
-	RustIroh  string `json:"rust_iroh,omitempty"`
+	Schema   string `json:"schema"`
+	Scenario string `json:"scenario"`
+	Peer     string `json:"peer"`
+	Impl     string `json:"impl"`
+
+	// GoIroh is a property of the CLIENT: it is read from this k6
+	// binary's own build info, and the client is go-iroh in every cell.
+	GoIroh   string `json:"go_iroh"`
+	RustIroh string `json:"rust_iroh,omitempty"`
+
+	// The sink axis. A cell varies the client or the sink, and until
+	// these existed the corpus could not say which: an A/B that rebuilt
+	// both from one checkout moved them together and reported the pair
+	// under a single name. The client cannot observe the sink -- it is
+	// another process -- so the runner declares it, and compare treats a
+	// declaration that disagrees within an arm the same way it treats
+	// two go-iroh builds pooled into one.
+	SinkImpl    string `json:"sink_impl,omitempty"`
+	SinkVersion string `json:"sink_version,omitempty"`
+	// SinkReadBuf is recorded because CONFOUNDS.md requires any cell
+	// claiming a receive-path delta to state its read size, and a cell
+	// that does not carry it cannot make that claim later.
+	SinkReadBuf int `json:"sink_read_buf,omitempty"`
+	// SinkTokio is the tokio runtime flavor for a Rust-backed sink. It
+	// is empty for a Go sink, which has no such knob.
+	SinkTokio string `json:"sink_tokio,omitempty"`
+
 	Host      string `json:"host"`
 	Seed      string `json:"seed,omitempty"`
 	Timestamp string `json:"ts"`
@@ -54,6 +76,11 @@ type resultLog struct {
 	rustIroh string
 	goIroh   string
 	host     string
+
+	sinkImpl    string
+	sinkVersion string
+	sinkReadBuf int
+	sinkTokio   string
 }
 
 // open lazily opens the JSONL file; it reports false when JSONL output
@@ -82,6 +109,14 @@ func (l *resultLog) open() bool {
 	l.seed = l.env("PERFLAB_SEED")
 	l.rustIroh = l.env("RUST_IROH_VERSION")
 	l.goIroh = goIrohVersion()
+	// The sink runs in another process, so its identity is declared by
+	// whoever started it rather than observed here. Absent stays absent:
+	// an unset sink axis records nothing, which compare reads as "not
+	// stated" -- unlike a guessed default, which would read as a fact.
+	l.sinkImpl = l.env("PERFLAB_SINK_IMPL")
+	l.sinkVersion = l.env("PERFLAB_SINK_VERSION")
+	l.sinkReadBuf, _ = strconv.Atoi(l.env("PERFLAB_SINK_READ_BUF"))
+	l.sinkTokio = l.env("PERFLAB_SINK_TOKIO")
 	host, _ := os.Hostname()
 	l.host = fmt.Sprintf("%s/%s/%s", runtime.GOOS, runtime.GOARCH, host)
 	return true
@@ -180,14 +215,20 @@ func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res S
 		// native corpus values ("go", "rust") used by go-iroh's
 		// benchmark harness, so the two can
 		// never be pooled as if gr were Rust-native.
-		Lang:      cellName(peer),
-		Bytes:     res.BytesSent,
-		Schema:    "perflab/1",
-		Scenario:  l.scenario,
-		Peer:      peer,
-		Impl:      impl,
-		GoIroh:    l.goIroh,
-		RustIroh:  l.rustIroh,
+		Lang:     cellName(peer),
+		Bytes:    res.BytesSent,
+		Schema:   "perflab/1",
+		Scenario: l.scenario,
+		Peer:     peer,
+		Impl:     impl,
+		GoIroh:   l.goIroh,
+		RustIroh: l.rustIroh,
+
+		SinkImpl:    l.sinkImpl,
+		SinkVersion: l.sinkVersion,
+		SinkReadBuf: l.sinkReadBuf,
+		SinkTokio:   l.sinkTokio,
+
 		Host:      l.host,
 		Seed:      l.seed,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
