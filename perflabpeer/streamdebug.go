@@ -1,4 +1,4 @@
-package perflab
+package perflabpeer
 
 import (
 	"fmt"

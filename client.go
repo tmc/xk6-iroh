@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tmc/go-iroh-perflab/xk6-iroh/perflabpeer"
 	"github.com/tmc/go-iroh/blobs"
 	"github.com/tmc/go-iroh/endpointticket"
 	"github.com/tmc/go-iroh/gossip"
@@ -492,8 +493,8 @@ type streamOutcome struct {
 // return direction), so the measured duration covers delivery.
 // clientStreamDebug enables per-stream send-side offset dumps when
 // PERFLAB_STREAM_DEBUG names a file (diagnostic; see StreamDebug).
-var clientStreamDebug = sync.OnceValue(func() *StreamDebug {
-	d, err := NewStreamDebug("send", os.Getenv("PERFLAB_STREAM_DEBUG"), 5*time.Second)
+var clientStreamDebug = sync.OnceValue(func() *perflabpeer.StreamDebug {
+	d, err := perflabpeer.NewStreamDebug("send", os.Getenv("PERFLAB_STREAM_DEBUG"), 5*time.Second)
 	if err != nil {
 		return nil
 	}
@@ -601,7 +602,7 @@ type FetchResult struct {
 type progressWriter struct {
 	n        int64
 	lastUnix atomic.Int64 // UnixNano of last progress
-	probe    *StreamProbe
+	probe    *perflabpeer.StreamProbe
 }
 
 func (w *progressWriter) Write(p []byte) (int, error) {
