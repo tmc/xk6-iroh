@@ -54,12 +54,35 @@ Read this before trusting a number from it.
 | No `context.Context`, no cancellation | Every call blocks until it returns. Stream deadlines are unsupported, so an ffi cell is bounded by the k6 iteration timeout, not by `timeoutMs` |
 | One OS thread per in-flight stream | Each blocked read parks a thread inside Rust, and connection liveness needs another parked in `Closed()` |
 
-The last two are why this backend has a concurrency ceiling. Cell A
-(`ffi-peer/README.md`) measured the boundary getting *worse* as streams
-were added — 298 → 208 MB/s from 4 to 16 streams, while native Rust went
-329 → 426 over the same step. Read `impl: 'ffi'` results as a measurement
-of the boundary, not as a load generator that can saturate a fast target:
-a slow result may be the generator rather than the peer.
+The last two are why this backend has a concurrency ceiling. Cell B
+(`ffi-peer/README.md`, n=5, reads matched at 1 MiB across all sinks,
+descriptive medians, **NOT statistically gated**) measured the slope from
+4 to 16 streams at one write size:
+
+| arm | 4 streams | 16 streams | slope |
+| --- | --- | --- | --- |
+| gg (go sink) | 246.90 | 248.73 | +0.7% |
+| gr (rust sink) | 236.95 | 251.48 | +6.1% |
+| ffi | 243.47 | 184.12 | **−24.4%** |
+
+Both native stacks hold or gain where the FFI arm loses a quarter, and
+the sample counts say the same thing without the throughput metric: 208
+fan-outs completed for ffi against 280 and 284 native in the same 60 s.
+
+Two corrections that matter more than the headline:
+
+- **At 4 streams the order inverts** and the spread collapses to about
+  4% — ffi (243.47) is ahead of gr (236.95). So there is no such thing as
+  "the FFI penalty"; any single-shape ratio is an artifact of the shape
+  picked. The concurrency *slope* is the durable finding, not a ratio.
+- **Small writes are not where this hurts.** 1 KiB writes cost the FFI
+  arm about 5.5% against the native median; concurrency costs it 26%.
+  Cell A's 2.05× at 1 KiB was mostly concurrency wearing a small-write
+  costume, so read that number as superseded.
+
+Read `impl: 'ffi'` results as a measurement of the boundary, not as a
+load generator that can saturate a fast target: at high stream counts a
+slow result is more likely the generator than the peer.
 
 ## Version pinning
 
