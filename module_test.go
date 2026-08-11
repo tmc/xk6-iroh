@@ -108,3 +108,36 @@ func TestExportValueUnknownField(t *testing.T) {
 		t.Fatalf("exportValue = %v, want unknown-field error", err)
 	}
 }
+
+// TestDecodeTargetAcceptsBlobsTicket is the regression this function was
+// extracted for. The client decoded a blobs ticket happily and then handed
+// the same string to the backend, which understood only endpoint tickets,
+// so every blobs scenario failed at dial with "wrong prefix, expected
+// endpoint" -- a few lines after the ticket had been decoded successfully.
+func TestDecodeTargetAcceptsBlobsTicket(t *testing.T) {
+	sk, err := key.GenerateSecretKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	addr := netaddr.NewEndpointAddr(key.EndpointID(sk.Public()))
+	endpoint := endpointticket.Encode(addr)
+	blob := blobs.NewTicket(addr, blobs.NewHash([]byte("perflab")), blobs.Raw).EncodeString()
+
+	for _, tt := range []struct{ name, ticket string }{
+		{"endpoint", endpoint},
+		{"blobs", blob},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodeTarget(tt.ticket)
+			if err != nil {
+				t.Fatalf("decodeTarget: %v", err)
+			}
+			if got.ID != addr.ID {
+				t.Errorf("decoded a different endpoint: %v, want %v", got.ID, addr.ID)
+			}
+		})
+	}
+	if _, err := decodeTarget("nonsense"); err == nil {
+		t.Error("decodeTarget accepted a string that is neither ticket")
+	}
+}

@@ -122,13 +122,11 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	// Target is either a plain endpoint ticket or an iroh-blobs ticket
 	// (endpoint address + hash). A blobs ticket selects the blobs ALPN
 	// unless the script overrides it.
-	addr, decErr := endpointticket.Decode(config.Target)
-	if decErr != nil {
-		bt, berr := blobs.ParseTicket(config.Target)
-		if berr != nil {
-			return nil, fmt.Errorf("decode target ticket: %w", decErr)
-		}
-		addr = bt.Addr()
+	addr, err := decodeTarget(config.Target)
+	if err != nil {
+		return nil, err
+	}
+	if bt, berr := blobs.ParseTicket(config.Target); berr == nil {
 		c.blobHash = bt.Hash()
 		c.blobFormat = bt.Format()
 		c.hasBlob = true
@@ -138,6 +136,28 @@ func newClient(mi *ModuleInstance, config Config) (*Client, error) {
 	}
 	c.target = addr
 	return c, nil
+}
+
+// decodeTarget accepts either form of target a scenario may hold: a plain
+// endpoint ticket, or an iroh-blobs ticket carrying an endpoint address
+// and a hash. Both name an endpoint to dial, which is the only thing a
+// caller wanting to connect needs from them.
+//
+// It exists because there are two places that must agree about this: the
+// client, which reads the hash out of a blobs ticket, and the backend,
+// which dials. When only the client understood blobs tickets, every blobs
+// scenario failed at dial with "wrong prefix, expected endpoint" -- the
+// ticket had been decoded successfully once already, a few lines away.
+func decodeTarget(ticket string) (netaddr.EndpointAddr, error) {
+	addr, err := endpointticket.Decode(ticket)
+	if err == nil {
+		return addr, nil
+	}
+	bt, berr := blobs.ParseTicket(ticket)
+	if berr != nil {
+		return netaddr.EndpointAddr{}, fmt.Errorf("decode target ticket: %w", err)
+	}
+	return bt.Addr(), nil
 }
 
 // bindOptions returns the backend-independent endpoint options

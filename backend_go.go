@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tmc/go-iroh/endpointticket"
 	"github.com/tmc/go-iroh/iroh"
 	"github.com/tmc/go-iroh/netaddr"
 	"github.com/tmc/go-iroh/relay"
@@ -67,9 +66,9 @@ type goEndpoint struct{ ep *iroh.Endpoint }
 func (e *goEndpoint) endpoint() *iroh.Endpoint { return e.ep }
 
 func (e *goEndpoint) Connect(ctx context.Context, ticket, alpn string) (Conn, error) {
-	addr, err := endpointticket.Decode(ticket)
+	addr, err := decodeTarget(ticket)
 	if err != nil {
-		return nil, fmt.Errorf("decode target ticket: %w", err)
+		return nil, err
 	}
 	conn, err := e.ep.Connect(ctx, addr, alpn)
 	if err != nil {
