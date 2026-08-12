@@ -31,6 +31,20 @@ type resultLine struct {
 	Peer     string `json:"peer"`
 	Impl     string `json:"impl"`
 
+	// Step names the stage of a load schedule this sample belongs to,
+	// and OfferedRate is the arrival rate that stage demanded. They are
+	// empty for the constant-load scenarios, which have one stage.
+	//
+	// A ramp reports delivered load against offered, so the offered
+	// value has to travel with the sample rather than be reconstructed
+	// afterwards. Time bucketing cannot do it: an iteration that starts
+	// in one stage and ends in the next belongs to the stage that
+	// demanded it, which only the caller knows. Step also enters Rung
+	// below, so cmd/perflab-compare treats two stages the way it treats
+	// two builds -- as things that must not pool.
+	Step        string  `json:"step,omitempty"`
+	OfferedRate float64 `json:"offered_rate,omitempty"`
+
 	// GoIroh is a property of the CLIENT: it is read from this k6
 	// binary's own build info, and the client is go-iroh in every cell.
 	GoIroh   string `json:"go_iroh"`
@@ -210,28 +224,32 @@ func cellName(peer string) string {
 	return peer
 }
 
-// recordTransfer appends one JSONL line for a completed sendStreams
-// fan-out. It is a no-op unless PERFLAB_JSONL is set.
-func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res StreamResult, wall time.Duration, outcomes []streamOutcome) {
-	l := &root.results
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if !l.open() {
-		return
+// newLine fills the fields every record shares: the cell, the
+// provenance and the run's identity. The caller supplies the shape.
+// l.mu must be held.
+func (l *resultLog) newLine(peer, impl, rung string, step Step) resultLine {
+	if step.Name != "" {
+		// The step is part of the cell name, not a column beside it: a
+		// rung that pooled two stages of a ramp would report the mean
+		// of a curve, which is the one number a ramp exists to avoid.
+		rung += "-step-" + step.Name
 	}
 	line := resultLine{
-		Rung: fmt.Sprintf("perflab-%s-streams-%d-msg-%d", l.scenario, opts.Streams, opts.MsgSize),
+		Rung: rung,
 		// lang names the perflab CELL (gg = go client vs go peer,
 		// gr = go client vs rust peer), deliberately distinct from the
 		// native corpus values ("go", "rust") used by go-iroh's
 		// benchmark harness, so the two can
 		// never be pooled as if gr were Rust-native.
 		Lang:     cellName(peer),
-		Bytes:    res.BytesSent,
 		Schema:   "perflab/1",
 		Scenario: l.scenario,
 		Peer:     peer,
 		Impl:     impl,
+
+		Step:        step.Name,
+		OfferedRate: step.OfferedRate,
+
 		GoIroh:   l.goIroh,
 		RustIroh: l.rustIroh,
 
@@ -245,16 +263,13 @@ func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res S
 		Seed:      l.seed,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 	}
-	line.DurationNS = wall.Nanoseconds()
 	key := line.Rung + "\x00" + line.Lang
 	l.samples[key]++
 	line.Sample = l.samples[key]
-	for _, o := range outcomes {
-		if o.err == nil && o.sent > 0 && o.duration > 0 {
-			line.FlowBytes = append(line.FlowBytes, o.sent)
-			line.FlowDurationNS = append(line.FlowDurationNS, o.duration.Nanoseconds())
-		}
-	}
+	return line
+}
+
+func (l *resultLog) write(line resultLine) {
 	b, err := json.Marshal(line)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "perflab: marshal result line:", err)
@@ -263,4 +278,50 @@ func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res S
 	if _, err := l.f.Write(append(b, '\n')); err != nil {
 		fmt.Fprintln(os.Stderr, "perflab: write result line:", err)
 	}
+}
+
+// recordTransfer appends one JSONL line for a completed sendStreams
+// fan-out. It is a no-op unless PERFLAB_JSONL is set.
+func (root *RootModule) recordTransfer(peer, impl string, opts StreamOpts, res StreamResult, wall time.Duration, outcomes []streamOutcome) {
+	l := &root.results
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.open() {
+		return
+	}
+	rung := fmt.Sprintf("perflab-%s-streams-%d-msg-%d", l.scenario, opts.Streams, opts.MsgSize)
+	line := l.newLine(peer, impl, rung, opts.Step)
+	line.Bytes = res.BytesSent
+	line.DurationNS = wall.Nanoseconds()
+	for _, o := range outcomes {
+		if o.err == nil && o.sent > 0 && o.duration > 0 {
+			line.FlowBytes = append(line.FlowBytes, o.sent)
+			line.FlowDurationNS = append(line.FlowDurationNS, o.duration.Nanoseconds())
+		}
+	}
+	l.write(line)
+}
+
+// recordRequest appends one JSONL line for a completed request round
+// trip. It is a no-op unless PERFLAB_JSONL is set.
+//
+// Requests were absent from the corpus until the ramp needed them: the
+// rpc shape is one of the three the ramp runs, and a shape that emits
+// no lines cannot be compared by cmd/perflab-compare at all. Bytes is
+// the request payload and duration_ns the open-to-EOF round trip, so a
+// line here means the same thing it does for a transfer -- this many
+// bytes moved, in this long -- and the two rungs never pool because
+// the shape is in the rung name.
+func (root *RootModule) recordRequest(peer, impl string, opts RequestOpts, res RequestResult, rtt time.Duration) {
+	l := &root.results
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.open() {
+		return
+	}
+	rung := fmt.Sprintf("perflab-%s-request-%d", l.scenario, opts.Bytes)
+	line := l.newLine(peer, impl, rung, opts.Step)
+	line.Bytes = res.Sent
+	line.DurationNS = rtt.Nanoseconds()
+	l.write(line)
 }

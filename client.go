@@ -256,7 +256,34 @@ func (c *Client) Dial() error {
 }
 
 // StreamOpts configures Client.SendStreams.
+// Step identifies one stage of a load schedule, for scenarios that
+// vary offered load within a run.
+//
+// The script declares it per iteration rather than the extension
+// deriving it from the clock: k6's executors do not expose the stage a
+// given iteration was scheduled in, and an iteration that starts in one
+// stage and finishes in the next belongs to the one that demanded it.
+// Bucketing by timestamp afterwards would assign those to whichever
+// stage they happened to land in, which is exactly the boundary where a
+// saturating system misbehaves.
+//
+// A zero Step means constant load: the scenario has one stage and the
+// corpus records no step axis at all.
+type Step struct {
+	// Name identifies the stage. It becomes part of the corpus rung,
+	// so it must be stable across arms -- two arms compared at "step 3"
+	// have to mean the same offered load by the same name.
+	Name string `json:"name"`
+	// OfferedRate is the load the schedule demanded during this stage,
+	// in iterations per second. It is what delivered throughput is
+	// reported against.
+	OfferedRate float64 `json:"offeredRate"`
+}
+
 type StreamOpts struct {
+	// Step names the load-schedule stage this fan-out belongs to; the
+	// zero value means constant load. See Step.
+	Step Step `json:"step"`
 	// Streams is the number of concurrent streams to open.
 	Streams int `json:"streams"`
 	// Bytes is the number of bytes to send per stream.
@@ -297,7 +324,7 @@ func (c *Client) SendStreams(opts StreamOpts) (StreamResult, error) {
 	res := StreamResult{Streams: opts.Streams}
 	ctx, cancel := context.WithTimeout(c.vu.Context(), time.Duration(opts.TimeoutMs)*time.Millisecond)
 	defer cancel()
-	tags := c.tags(transferTags(opts.Streams, opts.MsgSize))
+	tags := withStep(c.tags(transferTags(opts.Streams, opts.MsgSize)), opts.Step)
 
 	// Failures land in res.Error (and the iroh_errors metric), not in a
 	// thrown JS exception: threshold gates, not script aborts, judge runs.
@@ -768,6 +795,9 @@ func (c *Client) FetchBlob(opts FetchOpts) (FetchResult, error) {
 
 // RequestOpts configures Client.Request.
 type RequestOpts struct {
+	// Step names the load-schedule stage this request belongs to; the
+	// zero value means constant load. See Step.
+	Step Step `json:"step"`
 	// Bytes is the request payload size (default 256).
 	Bytes int `json:"bytes"`
 	// TimeoutMs bounds one round trip in milliseconds (default 10000).
@@ -795,7 +825,7 @@ func (c *Client) Request(opts RequestOpts) (RequestResult, error) {
 	}
 	ctx, cancel := context.WithTimeout(c.vu.Context(), time.Duration(opts.TimeoutMs)*time.Millisecond)
 	defer cancel()
-	tags := c.tags(nil)
+	tags := withStep(c.tags(nil), opts.Step)
 
 	conn, err := c.connect(ctx)
 	if err != nil {
@@ -834,6 +864,8 @@ func (c *Client) Request(opts RequestOpts) (RequestResult, error) {
 		res.Error = err.Error()
 		return res, nil
 	}
-	c.metrics.push(c.vu, c.metrics.requestRTT, metricsDuration(time.Since(start)), tags)
+	rtt := time.Since(start)
+	c.metrics.push(c.vu, c.metrics.requestRTT, metricsDuration(rtt), tags)
+	c.root.recordRequest(c.config.Peer, c.config.Impl, opts, res, rtt)
 	return res, nil
 }

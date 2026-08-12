@@ -88,6 +88,25 @@ func transferTags(streams, msgSize int) map[string]string {
 	}
 }
 
+// withStep copies tags and adds the load-schedule stage, so k6's own
+// percentiles can be taken per step rather than over a whole ramp. A
+// zero step adds nothing: the constant-load scenarios keep exactly the
+// tag set they had before steps existed.
+//
+// Cardinality is the script's responsibility. A ramp declares its
+// stages up front (8-10 of them), which is the same order as the
+// streams and msg_size tags already carried here; a step named from a
+// timestamp or an iteration counter would not be.
+func withStep(tags map[string]string, step Step) map[string]string {
+	if step.Name == "" {
+		return tags
+	}
+	out := make(map[string]string, len(tags)+1)
+	maps.Copy(out, tags)
+	out["step"] = step.Name
+	return out
+}
+
 // withStage copies tags and adds the error stage. Stages are a small
 // fixed set (dial, open, write, close, drain) to keep tag cardinality low.
 func withStage(tags map[string]string, stage string) map[string]string {
