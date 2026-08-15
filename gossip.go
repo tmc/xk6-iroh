@@ -1,4 +1,4 @@
-package perflab
+package xk6iroh
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tmc/go-iroh-perflab/xk6-iroh/perflabpeer"
 	"github.com/tmc/go-iroh/gossip"
 	"github.com/tmc/go-iroh/netaddr"
+	"github.com/tmc/xk6-iroh/irohpeer"
 )
 
 // Gossip wire format: payload[0] is 'q' (query, client to swarm) or 'r'
@@ -28,7 +28,7 @@ type GossipOpts struct {
 	IntervalMs int `json:"intervalMs"`
 	// TimeoutMs bounds the whole call, including the join. Default 60s.
 	TimeoutMs int `json:"timeoutMs"`
-	// Topic is the topic name. Default perflabpeer.DefaultGossipTopic.
+	// Topic is the topic name. Default irohpeer.DefaultGossipTopic.
 	Topic string `json:"topic"`
 }
 
@@ -62,7 +62,7 @@ func (c *Client) Gossip(opts GossipOpts) (GossipResult, error) {
 		opts.TimeoutMs = 60000
 	}
 	if opts.Topic == "" {
-		opts.Topic = perflabpeer.DefaultGossipTopic
+		opts.Topic = irohpeer.DefaultGossipTopic
 	}
 	ctx, cancel := context.WithTimeout(c.vu.Context(), time.Duration(opts.TimeoutMs)*time.Millisecond)
 	defer cancel()
@@ -173,7 +173,7 @@ func (c *Client) joinGossip(ctx context.Context, topicName string) error {
 	}
 	c.gossip = gossip.NewGossip(ep)
 	start := time.Now()
-	t, err := c.gossip.SubscribeAndJoin(ctx, perflabpeer.GossipTopic(topicName), []netaddr.EndpointAddr{c.target})
+	t, err := c.gossip.SubscribeAndJoin(ctx, irohpeer.GossipTopic(topicName), []netaddr.EndpointAddr{c.target})
 	if err != nil {
 		c.gossip = nil
 		return fmt.Errorf("join topic: %w", err)

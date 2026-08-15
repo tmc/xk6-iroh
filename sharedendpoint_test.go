@@ -1,4 +1,4 @@
-package perflab
+package xk6iroh
 
 import (
 	"context"

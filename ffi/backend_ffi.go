@@ -9,11 +9,11 @@ import (
 	"time"
 
 	iroh "git.coopcloud.tech/decentral1se/iroh-go"
-	perflab "github.com/tmc/go-iroh-perflab/xk6-iroh"
 	"github.com/tmc/go-iroh/endpointticket"
+	xk6iroh "github.com/tmc/xk6-iroh"
 )
 
-func init() { perflab.RegisterBackend(Backend{}) }
+func init() { xk6iroh.RegisterBackend(Backend{}) }
 
 // Backend is Rust iroh reached through iroh-go.
 type Backend struct{}
@@ -23,11 +23,11 @@ func (Backend) Name() string { return "ffi" }
 // Capabilities: the bindings expose the endpoint layer only — no
 // iroh-blobs and no iroh-gossip surface — so those scenarios cannot run
 // against this implementation and say so rather than failing obscurely.
-func (Backend) Capabilities() perflab.Capabilities {
-	return perflab.Capabilities{Blobs: false, Gossip: false}
+func (Backend) Capabilities() xk6iroh.Capabilities {
+	return xk6iroh.Capabilities{Blobs: false, Gossip: false}
 }
 
-func (Backend) Bind(_ context.Context, opts perflab.BindOptions) (perflab.Endpoint, error) {
+func (Backend) Bind(_ context.Context, opts xk6iroh.BindOptions) (xk6iroh.Endpoint, error) {
 	// The context is unused throughout this backend: every binding call
 	// is a blocking FFI call with no cancellation, so a bind or a read
 	// cannot be interrupted by a cancelled context. Callers bound work
@@ -67,7 +67,7 @@ func (Backend) Bind(_ context.Context, opts perflab.BindOptions) (perflab.Endpoi
 
 type endpoint struct{ ep *iroh.Endpoint }
 
-func (e *endpoint) Connect(_ context.Context, ticket, alpn string) (perflab.Conn, error) {
+func (e *endpoint) Connect(_ context.Context, ticket, alpn string) (xk6iroh.Conn, error) {
 	addr, err := endpointAddr(ticket)
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func newConn(c *iroh.Connection) *conn {
 	return k
 }
 
-func (k *conn) OpenStream(context.Context) (perflab.Stream, error) {
+func (k *conn) OpenStream(context.Context) (xk6iroh.Stream, error) {
 	bi, err := k.c.OpenBi()
 	if err != nil {
 		return nil, irohErr(err)

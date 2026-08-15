@@ -1,4 +1,4 @@
-package perflabpeer
+package irohpeer
 
 import (
 	"fmt"

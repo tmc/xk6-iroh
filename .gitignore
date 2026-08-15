@@ -1,0 +1,4 @@
+# libiroh build output. The staticlib is built by the Makefile from
+# ffi/libiroh; only its Cargo.lock is tracked, because the lockfile is
+# what names the iroh the ffi backend links.
+ffi/libiroh/target/

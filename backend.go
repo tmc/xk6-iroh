@@ -1,4 +1,4 @@
-package perflab
+package xk6iroh
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // register themselves from separate modules, so an implementation that
 // needs cgo or a Rust toolchain never becomes a dependency of this one:
 //
-//	xk6 build --with github.com/tmc/go-iroh-perflab/xk6-iroh
+//	xk6 build --with github.com/tmc/xk6-iroh
 //
 // stays pure Go, and adding a second --with for a backend module gains
 // that implementation. Scripts select one with the client's impl option,

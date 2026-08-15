@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	perflab "github.com/tmc/go-iroh-perflab/xk6-iroh"
+	xk6iroh "github.com/tmc/xk6-iroh"
 )
 
 // TestCounterNames checks that every name in counterNames still exists in
@@ -14,7 +14,7 @@ import (
 //
 // Needs the locally built libiroh (make build-ffi).
 func TestCounterNames(t *testing.T) {
-	ep, err := Backend{}.Bind(context.Background(), perflab.BindOptions{RelayMode: "default"})
+	ep, err := Backend{}.Bind(context.Background(), xk6iroh.BindOptions{RelayMode: "default"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestCounterNames(t *testing.T) {
 // TestForcedRelayRefused pins the contract that a relay-forced bind fails
 // rather than silently producing a direct path labeled as relayed.
 func TestForcedRelayRefused(t *testing.T) {
-	_, err := Backend{}.Bind(context.Background(), perflab.BindOptions{
+	_, err := Backend{}.Bind(context.Background(), xk6iroh.BindOptions{
 		RelayMode: "forced",
 		RelayURL:  "http://127.0.0.1:3340",
 	})

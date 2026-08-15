@@ -1,4 +1,4 @@
-package perflabpeer
+package irohpeer
 
 import (
 	"github.com/tmc/go-iroh/blobs"

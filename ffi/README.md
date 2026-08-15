@@ -1,4 +1,4 @@
-# xk6-iroh-ffi
+# xk6-iroh/ffi
 
 The `ffi` backend for the perflab k6 extension: the k6 client driving
 Rust iroh through [iroh-go]'s uniffi/cgo bindings, selected per script
@@ -18,7 +18,7 @@ every consumer, tag or no tag, because `go mod tidy` resolves across all
 build configurations — verified, not assumed. Keeping the backend here
 means the plain
 
-	xk6 build --with github.com/tmc/go-iroh-perflab/xk6-iroh
+	xk6 build --with github.com/tmc/xk6-iroh
 
 stays pure Go with no Rust toolchain, and only a build that asks for both
 implementations pays for cgo.
@@ -27,12 +27,12 @@ implementations pays for cgo.
 
 	make build-ffi
 
-That builds `libiroh.a` from `ffi-peer/libiroh` and links a k6 with both
+That builds `libiroh.a` from `ffi/libiroh` and links a k6 with both
 backends. By hand:
 
 	xk6 build v2.2.0 --cgo=1 \
-	  --with github.com/tmc/go-iroh-perflab/xk6-iroh=./xk6-iroh \
-	  --with github.com/tmc/go-iroh-perflab/xk6-iroh-ffi=./xk6-iroh-ffi
+	  --with github.com/tmc/xk6-iroh=. \
+	  --with github.com/tmc/xk6-iroh/ffi=./ffi
 
 Then:
 
@@ -170,7 +170,7 @@ slow result is more likely the generator than the peer.
 The iroh version is decided by the archive that gets linked, not by any
 Go file here. iroh-go vendors a `libiroh.a` built from *upstream's*
 lockfile, so on linux a plain build silently links that older iroh
-whatever `ffi-peer/libiroh/Cargo.lock` says. `make build-ffi` puts the
+whatever `ffi/libiroh/Cargo.lock` says. `make build-ffi` puts the
 locally built archive ahead of it on `CGO_LDFLAGS` and then verifies what
 actually got linked. Confirm it directly on any binary you measure with:
 

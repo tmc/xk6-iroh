@@ -1,4 +1,4 @@
-package perflab
+package xk6iroh
 
 import "go.k6.io/k6/v2/js/modules"
 

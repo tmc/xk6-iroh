@@ -1,4 +1,4 @@
-// Package perflab is a k6 extension (k6/x/iroh) that embeds go-iroh
+// Package xk6iroh is a k6 extension (k6/x/iroh) that embeds go-iroh
 // endpoints inside k6 virtual users to measure endpoint behavior under
 // load.
 //
@@ -51,11 +51,13 @@
 //
 // With the PERFLAB_JSONL environment variable set, every sendStreams
 // fan-out appends one line of JSONL (rung/lang/sample/bytes/duration_ns
-// plus provenance), a schema shared with go-iroh's benchmark
-// harness so runs from both can be analyzed together; cmd/perflab-compare
-// summarizes two runs without applying statistics.
+// plus provenance), a schema shared with go-iroh's benchmark harness so
+// runs from both can be analyzed together.
 //
-// The target peer is cmd/perflab-server (Go) or rust-peer (pinned Rust
-// iroh); both accept connections on ALPN "perflab/0", drain (sink) or
-// echo (echo) streams, and echo datagrams.
-package perflab
+// The target is any peer that accepts connections on the configured
+// ALPN and drains or echoes what arrives; [irohpeer] holds the little
+// both sides must agree on. Reference peers in Go and in Rust, the
+// scenarios that drive them, and the analysis tooling for the JSONL
+// live in github.com/tmc/go-iroh-perflab, which is a consumer of this
+// module rather than part of it.
+package xk6iroh

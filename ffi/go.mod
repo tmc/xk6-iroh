@@ -1,8 +1,8 @@
-module github.com/tmc/go-iroh-perflab/xk6-iroh-ffi
+module github.com/tmc/xk6-iroh/ffi
 
 go 1.26.1
 
-require github.com/tmc/go-iroh-perflab/xk6-iroh v0.0.0
+require github.com/tmc/xk6-iroh v0.0.0
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
@@ -52,4 +52,4 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 )
 
-replace github.com/tmc/go-iroh-perflab/xk6-iroh => ../xk6-iroh
+replace github.com/tmc/xk6-iroh => ..

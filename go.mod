@@ -1,4 +1,4 @@
-module github.com/tmc/go-iroh-perflab/xk6-iroh
+module github.com/tmc/xk6-iroh
 
 go 1.26
 

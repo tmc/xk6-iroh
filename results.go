@@ -1,4 +1,4 @@
-package perflab
+package xk6iroh
 
 import (
 	"encoding/json"
@@ -158,7 +158,7 @@ func (l *resultLog) env(key string) string {
 // goIrohCommit is stamped at link time by the Makefile with the commit
 // the go-iroh checkout was at:
 //
-//	-ldflags "-X github.com/tmc/go-iroh-perflab/xk6-iroh.goIrohCommit=$sha"
+//	-ldflags "-X github.com/tmc/xk6-iroh.goIrohCommit=$sha"
 //
 // A module build needs no stamp -- the pseudo-version already carries the
 // commit -- but a replace directive erases it, and a replace is how every
