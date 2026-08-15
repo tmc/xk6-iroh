@@ -53,22 +53,21 @@ export default function () {
 }
 ```
 
-Selecting an `impl` this binary was not built with is an error, not a
-fallback to `go`: a result labeled with an implementation it did not run
-is worse than no result.
+Selecting an `impl` this binary was not built with is an error rather
+than a fallback to `go`, so a result is always labelled with the
+implementation that actually produced it.
 
 See the package documentation for the full option set — endpoint scope,
 relay mode, datagram echo, and socket counters that prove whether traffic
 took the relay path.
 
-## What this repository is not
+## Scope
 
-It is the instrument, not the measurements. Reference peers, scenarios,
-the statistical harness, and the published results live in
-[go-iroh-perflab](https://github.com/tmc/go-iroh-perflab), which consumes
-this module and pins the revision it measured with. Nothing here should
-grow a dependency on that repository.
+This repository is the instrument. Scenarios, target peers, and the
+statistical harness that turns runs into comparable numbers are a
+separate concern and live elsewhere; nothing here should grow a
+dependency on them.
 
 The `ffi` backend does not implement every capability the `go` backend
-does; `ffi/README.md` lists what it cannot do, which is a shorter list to
-read before trusting a number than to discover afterwards.
+does. `ffi/README.md` lists the differences — worth reading before
+choosing a backend for a given scenario.

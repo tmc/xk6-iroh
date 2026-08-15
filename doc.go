@@ -22,8 +22,8 @@
 // "go" (go-iroh) is always present and is the default; others come from
 // separate modules added with their own --with at build time, so a plain
 // build stays pure Go. An impl this binary lacks is an error rather than
-// a silent fallback, because a cell labeled with an implementation it
-// did not run is worse than one that fails.
+// a silent fallback, so a sample is always labelled with the
+// implementation that produced it.
 //
 //	export default function () {
 //	    const res = client.sendStreams({ streams: 16, bytes: 64 * 1024 * 1024, msgSize: 1024 });
@@ -56,8 +56,6 @@
 //
 // The target is any peer that accepts connections on the configured
 // ALPN and drains or echoes what arrives; [irohpeer] holds the little
-// both sides must agree on. Reference peers in Go and in Rust, the
-// scenarios that drive them, and the analysis tooling for the JSONL
-// live in github.com/tmc/go-iroh-perflab, which is a consumer of this
-// module rather than part of it.
+// both sides must agree on. Peers, scenarios and analysis tooling are a
+// separate concern and are not part of this module.
 package xk6iroh

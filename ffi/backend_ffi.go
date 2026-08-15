@@ -79,10 +79,10 @@ func (e *endpoint) Connect(_ context.Context, ticket, alpn string) (xk6iroh.Conn
 	return newConn(conn), nil
 }
 
-// endpointAddr resolves a perflab target ticket to an iroh EndpointAddr.
+// endpointAddr resolves a target ticket to an iroh EndpointAddr.
 //
 // iroh's own deserializer handles tickets iroh wrote, but not the ones
-// go-iroh writes: EndpointTicketFromString rejects a perflab-server
+// go-iroh writes: EndpointTicketFromString rejects a go-iroh
 // ticket with "Serde Deserialization Error". Rather than restrict this
 // backend to Rust targets, fall back to decoding with go-iroh — pure Go,
 // and only ticket parsing, so nothing on the measured data path changes.

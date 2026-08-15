@@ -19,6 +19,28 @@ build: ## k6 with the pure-Go backend
 		--with github.com/tmc/xk6-iroh=. \
 		$(if $(IROH_REPLACE),--replace github.com/tmc/go-iroh=$(IROH_REPLACE))
 
+# build-ffi-vendored is the ffi backend with no Rust toolchain at all, on
+# linux only. iroh-go vendors a libiroh.a for linux/amd64 and
+# linux/arm64, and cgo finds it without help; there is no darwin archive,
+# which is why build-ffi below exists.
+#
+# The tradeoff is the iroh version. The vendored archive is built from
+# iroh-go's own lockfile and is currently iroh 1.0.0, where ffi/libiroh
+# pins 1.0.3. For trying the backend out that difference does not matter.
+# For anything you intend to quote, it does, so this target prints what
+# it linked rather than leaving you to assume.
+build-ffi-vendored: ## linux only: ffi backend against iroh-go's vendored libiroh, no Rust
+	@case "$$(go env GOOS)" in linux) ;; *) \
+		echo "build-ffi-vendored is linux-only: iroh-go vendors no archive for $$(go env GOOS)"; \
+		echo "  use make build-ffi, which builds one from ffi/libiroh"; \
+		exit 1;; esac
+	@rm -f $(K6_OUT)
+	CGO_ENABLED=1 xk6 build $(K6_VERSION) --cgo=1 -o $(K6_OUT) \
+		--with github.com/tmc/xk6-iroh=. \
+		--with github.com/tmc/xk6-iroh/ffi=./ffi \
+		$(if $(IROH_REPLACE),--replace github.com/tmc/go-iroh=$(IROH_REPLACE))
+	@echo "linked iroh: $$(strings $(K6_OUT) | grep -oE 'iroh-1\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ')"
+
 # build-ffi links a k6 carrying both backends, so a script can pick the
 # implementation at runtime with impl: 'ffi'.
 #
@@ -75,4 +97,4 @@ lint: ## static checks; a real finding fails the target
 		govulncheck ./...; \
 	else echo "govulncheck not installed; skipped"; fi
 
-.PHONY: help build build-ffi test lint
+.PHONY: help build build-ffi build-ffi-vendored test lint

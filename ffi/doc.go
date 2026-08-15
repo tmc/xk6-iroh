@@ -15,20 +15,23 @@
 //	xk6 build --with github.com/tmc/xk6-iroh=. \
 //	          --with github.com/tmc/xk6-iroh/ffi=./ffi
 //
-// Scripts then select it with impl: 'ffi'. See README.md for what this
-// backend cannot do, which is a shorter list to read before trusting a
-// number than to discover afterwards.
+// Scripts then select it with impl: 'ffi'. See README.md for how this
+// backend differs from the pure-Go one, and for a known liveness issue
+// in the bindings.
 //
 // # Building
 //
-// Use make build-ffi rather than xk6 build directly. It builds libiroh.a
-// from ffi/libiroh, puts it ahead of the archive iroh-go vendors for
-// linux/musl — which is pinned to an older iroh and would otherwise be
-// linked silently — and then reads the version strings back out of the
-// resulting k6 binary, failing the build if they disagree with
-// Cargo.lock. The binary decides which iroh was measured; the lockfile
-// only records an intention.
+// On linux, make build-ffi-vendored needs no Rust toolchain: iroh-go
+// vendors a libiroh.a for linux/amd64 and linux/arm64 and cgo finds it
+// unaided. It is built from iroh-go's lockfile and so pins an older
+// iroh than ffi/libiroh does, and the target prints what it linked.
 //
-// On darwin the archive must be built locally in any case: see
-// cgo_darwin.go for the link line and why CoreWLAN is on it.
+// make build-ffi builds libiroh.a from ffi/libiroh instead, and is the
+// only option on darwin, where nothing is vendored. It puts the local
+// archive ahead of the vendored one, then reads the version strings back
+// out of the resulting k6 binary and fails the build if they disagree
+// with Cargo.lock: the binary decides which iroh is present, and the
+// lockfile only records an intention.
+//
+// See cgo_darwin.go for the darwin link line and why CoreWLAN is on it.
 package xk6irohffi
