@@ -47,8 +47,32 @@ test: ## test both modules
 	go test -race ./...
 	go build -C ffi ./...
 
-vet:
+# A missing tool and a tool that found something must not look alike:
+# `cmd && tool || echo skipped` reports "skipped" for both, and swallows
+# the failure. Test for the tool first, then let it decide the exit
+# status.
+#
+# Two xk6 lint checks stay disabled, for different reasons. Do not read
+# them as a pair.
+#
+# vulnerability: deduplication. govulncheck below covers it and reports
+# what it found rather than only that it found something.
+#
+# security: it reports a missing gosec as a failed check, which is the
+# exact bug described above. The reason is that we cannot make xk6
+# distinguish missing from failing, not that the check does not apply.
+#
+# readme, license, git and versions are NOT disabled here. They were, in
+# the repository this was split out of, because they assume the extension
+# directory is its own repository root -- which it now is.
+lint: ## static checks; a real finding fails the target
 	go vet ./...
-	gofmt -l . | grep -v '^ffi/libiroh/' && exit 1 || true
+	@gofmt -l . | grep -v '^ffi/libiroh/' && { echo "gofmt: files above need formatting"; exit 1; } || true
+	@if command -v xk6 >/dev/null; then \
+		xk6 lint --disable vulnerability,security .; \
+	else echo "xk6 not installed; skipped"; fi
+	@if command -v govulncheck >/dev/null; then \
+		govulncheck ./...; \
+	else echo "govulncheck not installed; skipped"; fi
 
-.PHONY: help build build-ffi test vet
+.PHONY: help build build-ffi test lint
