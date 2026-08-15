@@ -65,6 +65,19 @@ build-ffi: ## k6 with both backends, so a script can pick impl at runtime
 		*) echo "k6: want iroh-$$want, linked: $$got"; exit 1;; \
 	esac
 
+# ffi depends on the parent by version, not by a replace, because a
+# replace in a published module is ignored by whoever depends on it --
+# the module would resolve to a version that does not exist. The cost is
+# that ffi builds against the released parent even here, so a change to
+# the parent is invisible to it until that change is tagged.
+#
+# make workspace is the way to see it anyway, and it is deliberately a
+# thing you ask for: go.work is gitignored, so the substitution cannot
+# travel with the repository or quietly outlive the work it was for.
+workspace: ## go.work substituting this tree for the released parent (development only)
+	go work init . ./ffi
+	@echo "workspace created; ffi now builds against this tree. rm go.work to undo."
+
 test: ## test both modules
 	go test -race ./...
 	go build -C ffi ./...
@@ -97,4 +110,4 @@ lint: ## static checks; a real finding fails the target
 		govulncheck ./...; \
 	else echo "govulncheck not installed; skipped"; fi
 
-.PHONY: help build build-ffi build-ffi-vendored test lint
+.PHONY: help build build-ffi build-ffi-vendored workspace test lint

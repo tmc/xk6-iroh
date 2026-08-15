@@ -2,3 +2,9 @@
 # ffi/libiroh; only its Cargo.lock is tracked, because the lockfile is
 # what names the iroh the ffi backend links.
 ffi/libiroh/target/
+
+# Development workspace (make workspace). Not tracked: it substitutes
+# this tree for the released parent module, and a substitution that
+# travels with the repository is one nobody remembers is there.
+/go.work
+/go.work.sum
