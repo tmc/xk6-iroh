@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/grafana/sobek v0.0.0-20260727154728-7781506a890f
-	github.com/tmc/go-iroh v0.0.0-20260815044908-fe78649bc861
+	github.com/tmc/go-iroh v0.1.0
 	go.k6.io/k6/v2 v2.2.0
 )
 
